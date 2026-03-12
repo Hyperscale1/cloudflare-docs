@@ -16,7 +16,7 @@ import { Render, Badge, GlossaryTooltip } from "~/components";
 Only available on Enterprise plans.
 :::
 
-By default, Gateway sends DNS requests to [1.1.1.1](/1.1.1.1/), Cloudflare's public DNS resolver, for resolution. Enterprise users can instead create Gateway policies to route DNS queries to custom resolvers.
+If your organization uses private DNS servers for internal domains, you need a way to route those queries away from the default public resolver. By default, Cloudflare Gateway sends DNS requests to [1.1.1.1](/1.1.1.1/), Cloudflare's public DNS resolver, for resolution. Enterprise users can instead create Gateway policies to route DNS queries to custom resolvers (your own DNS servers).
 
 ```mermaid
 flowchart TD
@@ -36,7 +36,7 @@ flowchart TD
     response--"Returns response"-->user
 ```
 
-Gateway will route user traffic to your configured DNS resolver based on the matching policy, even if your resolvers' IP addresses overlap.
+Gateway will route user traffic to your configured DNS resolver based on the matching policy, even if your resolvers' IP addresses overlap (for example, if multiple private networks use the same `10.x.x.x` range — Gateway uses [virtual networks](/cloudflare-one/networks/connectors/cloudflare-tunnel/private-net/cloudflared/tunnel-virtual-networks/) to disambiguate).
 
 ## Use cases
 
@@ -50,19 +50,27 @@ To get started with resolving internal DNS queries with resolver policies, refer
 
 ### Local Domain Fallback
 
-If your resolver is only reachable by a client device and not by Gateway via a Cloudflare Tunnel, IPsec/GRE tunnel, or other public Internet connections, you should configure [Local Domain Fallback](/cloudflare-one/team-and-resources/devices/warp/configure-warp/route-traffic/local-domains/) for your device. If both Local Domain Fallback and resolver policies are configured for the same device, Cloudflare will apply your client-side Local Domain Fallback rules first. If you onboard DNS queries to Gateway with the WARP client and route them with resolver policies, the source IP of the queries will be the IP address assigned by the WARP client.
+If your DNS resolver is only reachable directly from the client device (not through any Cloudflare Tunnel, IPsec/GRE tunnel, or other public Internet connection), use [Local Domain Fallback](/cloudflare-one/team-and-resources/devices/warp/configure-warp/route-traffic/local-domains/) instead of resolver policies. Local Domain Fallback resolves queries on the device itself, bypassing Gateway entirely.
+
+If both Local Domain Fallback and resolver policies are configured for the same domain on the same device, Local Domain Fallback rules apply first. Queries that match a Local Domain Fallback rule never reach Gateway, so resolver policies will not apply to them.
+
+When DNS queries are sent to Gateway through the WARP client, the source IP seen by Gateway is the WARP-assigned IP, not the device's LAN IP. This matters if you use the Source IP selector in your resolver policies.
 
 <Render file="warp/ldf-best-practice" product="cloudflare-one" />
 
 ## Resolver connections
 
-Resolver policies support TCP and UDP connections. Custom resolvers can point to the Internet via IPv4 or IPv6, or to a private network service, such as a [Magic tunnel](/magic-transit/how-to/configure-tunnel-endpoints/). Policies default to port `53`. You can change which port your resolver uses by customizing it in your policy.
+Resolver policies support TCP and UDP connections. Custom resolvers can point to the Internet via IPv4 or IPv6, or to a private network service, such as a [Magic Transit IPsec or GRE tunnel](/magic-transit/how-to/configure-tunnel-endpoints/). Policies default to port `53`. You can change which port your resolver uses by customizing it in your policy.
 
-You can protect your authoritative nameservers from DDoS attacks by enabling [DNS Firewall](/dns/dns-firewall/).
+You can protect your authoritative nameservers that serve as custom resolvers from DDoS attacks by enabling [DNS Firewall](/dns/dns-firewall/).
 
 ### Cloudflare Tunnel
 
-You can configure connections to a private resolver connected to Cloudflare with [Cloudflare Tunnel](/cloudflare-one/networks/connectors/cloudflare-tunnel/). To ensure `cloudflared` can route UDP traffic to your resolver, connect your tunnel via [QUIC](/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/#protocol).
+You can configure connections to a private resolver connected to Cloudflare with [Cloudflare Tunnel](/cloudflare-one/networks/connectors/cloudflare-tunnel/).
+
+:::caution
+If your resolver uses UDP (the default for DNS on port 53), you must run `cloudflared` with the [QUIC protocol](/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/#protocol). Without QUIC, `cloudflared` cannot proxy UDP traffic, and DNS queries routed through the tunnel will fail.
+:::
 
 For more information on connecting a private DNS resolver to Cloudflare with Cloudflare Tunnel, refer to [Private DNS](/cloudflare-one/networks/connectors/cloudflare-tunnel/private-net/cloudflared/private-dns/).
 
@@ -161,7 +169,13 @@ Use this selector to filter based on the country where the query arrived to Gate
 <Render
 	file="gateway/value"
 	product="cloudflare-one"
-	params={{ selector: "Host", selectordescription: "hostname", operator: "matches regex", valueOne: ".*whispersystems.org", valueTwo: ".*signal.org" }}
+	params={{
+		selector: "Host",
+		selectordescription: "hostname",
+		operator: "matches regex",
+		valueOne: ".*whispersystems.org",
+		valueTwo: ".*signal.org",
+	}}
 />
 
 ## Logical operators

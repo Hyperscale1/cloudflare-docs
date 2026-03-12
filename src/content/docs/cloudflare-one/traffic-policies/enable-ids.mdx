@@ -10,17 +10,9 @@ head:
 
 import { TabItem, Tabs, DashButton } from "~/components";
 
-Cloudflare's Intrusion Detection System (IDS) is an Cloudflare Advanced Network Firewall feature you can use to actively monitor for a wide range of known threat signatures in your traffic. An IDS expands the security coverage of a firewall to analyze traffic against a broader threat database, detecting a variety of sophisticated attacks such as ransomware, data exfiltration, and network scanning based on signatures or “fingerprints” in network traffic.
+Cloudflare's Intrusion Detection System (IDS) monitors your traffic for known threat signatures using the [Advanced Network Firewall](/cloudflare-network-firewall/). This page explains how to enable IDS and configure detection rulesets.
 
-With Cloudflare's global anycast network, you get:
-
-- Cloudflare's entire global network capacity is now the capacity of your IDS.
-- Built-in redundancy and failover. Every server runs Cloudflare's IDS software, and traffic is automatically attracted to the closest network location to its source.
-- Continuous deployment for improvements to Cloudflare's IDS capabilities.
-
-Refer to [Enable IDS](/cloudflare-one/traffic-policies/enable-ids/#enable-ids) for more information on enabling IDS and creating new rulesets. After IDS is enabled, your traffic will be scanned to find malicious traffic. The detections are logged to destinations that can be configured from the dashboard. Refer to [Use Logpush with IDS](/cloudflare-one/insights/logs/use-logpush-with-ids) for instructions on configuring a destination to receive the detections. Additionally, all traffic that is analyzed can be accessed via [network analytics](/analytics/network-analytics/). Refer to [GraphQL Analytics](/cloudflare-network-firewall/tutorials/graphql-analytics/) to query the analytics data.
-
-Cloudflare's IDS takes advantage of the threat intelligence powered by our global network and extends the capabilities of the Cloudflare Firewall to monitor and protect your network from malicious actors.
+After enabling IDS, configure [Logpush](/cloudflare-network-firewall/how-to/use-logpush-with-ids/) (required) to receive detection logs and use [Network Analytics](/analytics/network-analytics/) to view analyzed traffic.
 
 ## Enable IDS
 
@@ -37,9 +29,11 @@ This feature is available for Cloudflare Advanced Network Firewall users. For ac
 
 </TabItem> <TabItem label="API">
 
-To start using IDS via the API, first create a new ruleset in the `magic-transit-ids-managed` phase with a rule which is enabled.
+The API uses the [Rulesets Engine](/ruleset-engine/) to manage IDS. You create a _root ruleset_ (your account-level configuration) that references a _managed ruleset_ (Cloudflare's maintained IDS signatures) via an `execute` action.
 
-1. Follow instructions in the [Rulesets Engine Page](/ruleset-engine/basic-operations/view-rulesets/) to view all rulesets for your account. You must see a ruleset with phase `magic-transit-ids-managed` and kind `managed`. If not, please contact your account team. The managed ruleset ID will be used in the next step.
+To start using IDS via the API, first create a new ruleset in the `magic_transit_ids_managed` phase with a rule which is enabled.
+
+1. Follow instructions in the [Rulesets Engine Page](/ruleset-engine/basic-operations/view-rulesets/) to view all rulesets for your account. You should see a ruleset with phase `magic_transit_ids_managed` and kind `managed`. This ruleset is provisioned by Cloudflare when your account has the Advanced Network Firewall add-on. If you do not see it, contact your account team to confirm the add-on is active. The managed ruleset ID will be used in the next step.
 
 2. Create a new root ruleset with a single rule in the `magic_transit_ids_managed` phase by running:
 
@@ -59,16 +53,20 @@ curl https://api.cloudflare.com/client/v4/accounts/{account_id}/rulesets \
       "action": "execute",
       "description": "enable ids",
       "action_parameters": {
-        "id": "${managed_ruleset_id}"
+        "id": "<MANAGED_RULESET_ID>"
       }
     }
   ]
 }'
 ```
 
-With this ruleset added, IDS will start inspecting packets and report any anomalous traffic. Next, you can [configure Logpush](/cloudflare-network-firewall/how-to/use-logpush-with-ids/) to start receiving details about the anomalous traffic.
+With this ruleset added, IDS will start inspecting packets and report any anomalous traffic. Next, [configure Logpush](/cloudflare-network-firewall/how-to/use-logpush-with-ids/) to start receiving details about the anomalous traffic.
 
-3. Use the rule created in the previous step to enable or disable IDS. The Rulesets API documentation describes [how to patch a rule](/ruleset-engine/rulesets-api/update-rule/). <br/><br/> For example, the following patch request to set the `enabled` field to `false` will disable IDS. The ruleset and rule ID from the ruleset created in the previous step are used below.
+## Disable or re-enable IDS
+
+Use the rule created in the enable procedure to disable or re-enable IDS. The Rulesets API documentation describes [how to patch a rule](/ruleset-engine/rulesets-api/update-rule/).
+
+For example, the following patch request sets the `enabled` field to `false` to disable IDS. The ruleset and rule ID from the ruleset created above are used below.
 
 ```bash
 curl --request PATCH \
@@ -80,23 +78,26 @@ https://api.cloudflare.com/client/v4/accounts/{account_id}/rulesets/{root_rulese
   "expression": "true",
   "action": "execute",
   "action_parameters": {
-    "id": "${managed_ruleset_id}"
+    "id": "<MANAGED_RULESET_ID>"
   }
 }'
 ```
 
-Similarly, sending a patch request with the `enabled` field set to `true` will enable IDS.
+Similarly, sending a patch request with the `enabled` field set to `true` will re-enable IDS.
 
 </TabItem> </Tabs>
 
 ## IDS rules
 
-IDS rules are run on a subset of packets. IDS also supports the current flows:
+IDS inspects traffic in the following scenarios:
 
-- Cloudflare WAN to Cloudflare WAN.
-- Magic Transit ingress traffic (when egress traffic is handled through direct server return).
-- Magic Transit ingress and egress traffic when Magic Transit has the [Egress option enabled](/reference-architecture/architectures/magic-transit/#magic-transit-with-egress-option-enabled).
+- **WAN-to-WAN:** Traffic routed between sites through [Cloudflare WAN](/magic-wan/).
+- **Magic Transit ingress only:** Inbound traffic protected by Magic Transit, where outbound traffic returns directly to the origin (direct server return).
+- **Magic Transit ingress and egress:** Both directions when Magic Transit has the [Egress option enabled](/reference-architecture/architectures/magic-transit/#magic-transit-with-egress-option-enabled).
 
 ## Next steps
 
-You must configure Logpush to log detected risks. Refer to [Configure a Logpush destination](/cloudflare-network-firewall/how-to/use-logpush-with-ids/) for more information. Additionally, all traffic that is analyzed can be accessed via [network analytics](/analytics/network-analytics/). Refer to [GraphQL Analytics](/cloudflare-network-firewall/tutorials/graphql-analytics/) to query the analytics data.
+After enabling IDS:
+
+1. **Configure Logpush** (required) — IDS detections are not visible without a Logpush destination. Refer to [Configure Logpush for IDS](/cloudflare-network-firewall/how-to/use-logpush-with-ids/).
+2. **Review traffic analytics** — All analyzed traffic appears in [Network Analytics](/analytics/network-analytics/). Use [GraphQL Analytics](/cloudflare-network-firewall/tutorials/graphql-analytics/) for programmatic queries.

@@ -33,7 +33,7 @@ Use DNS policies to block malicious domains, restrict content categories, or pre
 
 <Details header="Network policies">
 
-**[Network policies](/cloudflare-one/traffic-policies/network-policies/)** inspect individual TCP, UDP, and GRE packets. They can match on IP addresses, ports, protocols, and the server name sent at the start of an encrypted connection (Server Name Indication, or SNI).
+**[Network policies](/cloudflare-one/traffic-policies/network-policies/)** inspect individual TCP, UDP, and GRE (Generic Routing Encapsulation) packets. They can match on IP addresses, ports, protocols, and the server name sent at the start of an encrypted connection (Server Name Indication, or SNI).
 
 Use network policies to block access to specific ports or non-HTTP services such as SSH and RDP.
 
@@ -49,7 +49,7 @@ Use HTTP policies to block specific URLs, scan file uploads for sensitive data, 
 
 <Details header="Egress policies">
 
-**[Egress policies](/cloudflare-one/traffic-policies/egress-policies/)** control how traffic leaves your network by assigning fixed IP addresses that belong to your organization. Third-party services can recognize these IPs as yours.
+**[Egress policies](/cloudflare-one/traffic-policies/egress-policies/)** control how traffic leaves your network. By default, traffic proxied through Gateway exits from shared Cloudflare IP addresses. Egress policies let you assign fixed IP addresses that belong to your organization, so third-party services can recognize the traffic as yours.
 
 Use egress policies to connect to partners or services that only allow traffic from a known list of IP addresses.
 
@@ -82,7 +82,7 @@ For each policy type, follow this workflow:
 3. Set up recommended security policies — for example, block all [security threat categories](/cloudflare-one/traffic-policies/domain-categories/#security-categories) with a DNS policy.
 4. Add policies specific to your organization's needs.
 
-For example, if your goal is to prevent employees from accessing known malware domains, you would start by enrolling devices with the WARP client (step 1), confirm DNS queries appear in your Gateway logs (step 2), then create a DNS policy that blocks all security-risk categories (step 3).
+For example, if your goal is to prevent employees from accessing known malware domains, you would start by enrolling devices with the [WARP client](/cloudflare-one/team-and-resources/devices/warp/) (step 1), confirm DNS queries appear in your [Gateway logs](/cloudflare-one/insights/logs/) (step 2), then create a DNS policy that blocks all security-risk categories (step 3).
 
 For step-by-step setup guides, refer to [DNS](/cloudflare-one/traffic-policies/get-started/dns/), [Network](/cloudflare-one/traffic-policies/get-started/network/), and [HTTP](/cloudflare-one/traffic-policies/get-started/http/) policies.
 

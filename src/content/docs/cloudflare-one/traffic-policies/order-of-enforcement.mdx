@@ -7,6 +7,6 @@ sidebar:
 
 import { Render } from "~/components";
 
-With Cloudflare Gateway, you can [enable and configure](/cloudflare-one/traffic-policies/get-started/) any combination of DNS, network, and HTTP policies.
+With [Cloudflare Gateway](/cloudflare-one/traffic-policies/), you can [enable and configure](/cloudflare-one/traffic-policies/get-started/) any combination of DNS, network, and HTTP policies. This page explains the order in which Gateway evaluates those policies when processing traffic — a higher-precedence policy can silently override a lower one, so understanding evaluation order is critical for avoiding unexpected allow or block behavior.
 
 <Render file="gateway/order-of-enforcement" product="cloudflare-one" />

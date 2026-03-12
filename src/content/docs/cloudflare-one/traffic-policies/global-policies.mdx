@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-Cloudflare Zero Trust applies a set of global policies to all accounts.
+Global policies are a set of built-in [Cloudflare Gateway](/cloudflare-one/gateway/) rules that Cloudflare applies to all Zero Trust accounts. These policies protect Cloudflare infrastructure and ensure that critical services — such as the Zero Trust dashboard, WARP client registration, and block pages — remain accessible. Global policies are evaluated before any custom policies you create, and they cannot be modified or deleted.
 
 Zero Trust logs prepend an identifier to global policy names. For example, matches for the global policy **Allow Zero Trust Services** will appear in your logs with the name **Global Policy - Allow Zero Trust Services**.
 
@@ -14,6 +14,11 @@ The following policies are sorted by [order of precedence](/cloudflare-one/traff
 ## DNS resolution policies
 
 Gateway enforces global DNS and resolver policies before any other policies. This ensures the traffic is not blocked by user policies and gets resolved with Cloudflare's public DNS resolver, [1.1.1.1](/1.1.1.1/). Each global DNS policy evaluates traffic based on the domain in the query.
+
+The DNS resolution policies use two actions:
+
+- **allow** — Permits the DNS query to proceed. This prevents your custom Block policies from accidentally blocking the domain.
+- **resolve** — Forces the domain to be resolved through [1.1.1.1](/1.1.1.1/) instead of any custom [resolver policy](/cloudflare-one/traffic-policies/resolver-policies/) you may have configured. This ensures the domain resolves correctly even if your resolver policies would otherwise redirect it.
 
 | Name                                                                                      | ID                                     | Value                                                                                                                                                     | Action  |
 | ----------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -54,6 +59,8 @@ Gateway enforces global DNS and resolver policies before any other policies. Thi
 
 ## Network proxy policies
 
+Network proxy policies ensure that traffic to Cloudflare services is allowed through the [Gateway proxy](/cloudflare-one/traffic-policies/proxy/) and not blocked by your custom network policies.
+
 | Name                                                | ID                                     | Criteria | Value                                                                                                                                                                                                                                                                                                                                                                                                    | Action | Description                                                                                                                                                   |
 | --------------------------------------------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Allow CF Network Error Logging L4                   | `00000001-e4af-4b82-8f8c-c79c1d5d212e` | Hostname | `*.nel.cloudflare.com`                                                                                                                                                                                                                                                                                                                                                                                   | allow  | Allows SNI domains for WARP registration.                                                                                                                     |
@@ -64,6 +71,14 @@ Gateway enforces global DNS and resolver policies before any other policies. Thi
 | Allow HTTP requests to browser-rendered Access Apps | `00000001-1f93-4476-8f92-9aa4407d1c5f` | Hostname | `*.zero-trust-apps.cfdata.org`, `*.zero-trust-apps-staging.cfdata.org`, `*.zero-trust-apps.fed.cfdata.org`, or `*.zero-trust-apps-staging.fed.cfdata.org`                                                                                                                                                                                                                                                | allow  | Allows Cloudflare Access terminal applications [rendered in a browser](/cloudflare-one/access-controls/applications/non-http/browser-rendering/#ssh-and-vnc). |
 
 ## HTTP inspection policies
+
+HTTP inspection policies control how Gateway handles [TLS decryption](/cloudflare-one/traffic-policies/http-policies/tls-decryption/) for Cloudflare services. These policies use the following actions:
+
+- **bypass** — Skips TLS decryption for the matched traffic. This is equivalent to a [Do Not Inspect](/cloudflare-one/traffic-policies/http-policies/#do-not-inspect) policy.
+- **allow** — Permits the HTTP request to proceed without blocking.
+- **block** — Blocks the HTTP request.
+- **noisolate** — Prevents the matched traffic from being sent to [Browser Isolation](/cloudflare-one/remote-browser-isolation/).
+- **noscan** — Skips [antivirus scanning](/cloudflare-one/traffic-policies/http-policies/antivirus-scanning/) for the matched traffic.
 
 | Name                                   | ID                                     | Criteria         | Value                                                                                                                                           | Action    | Description                                                                                                                                    |
 | -------------------------------------- | -------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

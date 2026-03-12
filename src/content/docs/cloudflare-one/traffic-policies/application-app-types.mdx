@@ -58,13 +58,16 @@ Gateway sorts applications into the following app type groups:
 | Shopping                                       | Online shopping applications                                                                                                |
 | Social Networking                              | Social networking applications                                                                                              |
 | Sports                                         | Sports streaming and news applications                                                                                      |
-| Travel                                         | Travel related applications                                                                                                |
+| Travel                                         | Travel related applications                                                                                                 |
 | Video Streaming & Editing                      | Applications used for streaming and editing video                                                                           |
 | [Do Not Inspect](#do-not-inspect-applications) | Applications incompatible with the TLS certificate required by the [Gateway proxy](/cloudflare-one/traffic-policies/proxy/) |
 
 ## Application hostnames
 
-Applications categorized by Cloudflare may independently rely on a number of different internal and external resources to provide functionality. To enable effective behavior of Allow and Block Gateway policies, Cloudflare One separates application definitions into [hostnames](#hostnames) and [support hostnames](#support-hostnames).
+Applications categorized by Cloudflare may rely on a number of different internal and external resources to provide functionality. To enable effective behavior of Allow and Block Gateway policies, Cloudflare One separates application definitions into [hostnames](#hostnames) and [support hostnames](#support-hostnames). This distinction determines how Gateway enforces policies:
+
+- **Block policies** only act on an application's core hostnames. Gateway does not block support hostnames because doing so could break unrelated applications.
+- **Allow policies** act on both core hostnames and support hostnames. This ensures the application has access to all the shared resources it needs to function.
 
 ### Hostnames
 
@@ -72,9 +75,11 @@ Hostnames are domains that are core to the application and not [used by other ap
 
 ### Support hostnames
 
-Support hostnames are shared resources which applications may call in order to function. Applications can use support hostnames for content delivery, application behavior, or third-party system integrations. Blocking these hostnames may result in unexpected behavior for other policies. In addition, not taking a specific action on one of these hostnames may affect the application's behavior, even if the application hostnames are allowed. For example, assume that `file-sharing-service.com` relies on `content-delivery.com`. If you allow access to `file-sharing-service.com` and its associated subdomains but not `content-delivery.com`, some of the functionality of `file-sharing-service.com` may break when Gateway matches the traffic.
+Support hostnames are shared resources which applications call to function. Applications can use support hostnames for content delivery, application behavior, or third-party system integrations.
 
-To ensure effective application behavior, Gateway only uses support hostnames in Allow policies. Cloudflare explicitly allows support hostname connections in these policies but will not block the connections in Block policies. For example, many Google applications use `accounts.google.com` for authentication. In a Cloudflare One environment with highly restrictive policies, `accounts.google.com` must be allowed for many applications to function correctly. If you use an application with `accounts.google.com` in its support hostnames in an Allow policy, Gateway will allow both `accounts.google.com` and the application's domains.
+Because multiple applications share these hostnames, Gateway does not block support hostnames. Blocking a shared hostname could break unrelated applications that depend on it. However, if a support hostname is not explicitly allowed, the application may still lose functionality even when its core hostnames are allowed.
+
+For example, many Google applications use `accounts.google.com` for authentication. In a Cloudflare One environment with restrictive policies, `accounts.google.com` must be allowed for Google Drive, Gmail, and other Google applications to function. If you create an Allow policy for Google Drive, Gateway will allow both Google Drive's core hostnames and `accounts.google.com`.
 
 ## Application controls
 
@@ -88,13 +93,17 @@ For more information, refer to [Application Granular Controls](/cloudflare-one/t
 
 ### Overlapping hostnames
 
-Overlapping hostnames are most common for vendors with many applications, such as Google or Meta. When you use the Application selector in Gateway policies, actions taken by Gateway will be limited to the specific application defined. Gateway will also log other applications that use the same hostnames, but it will not take action unless the application was matched by the policy. For example, both the Facebook and Facebook Messenger apps use the `chat-e2ee.facebook.com` hostname. When evaluating traffic to the Facebook Messenger app, Gateway will only take action on Facebook Messenger traffic but may log both the Facebook and Facebook Messenger apps.
+Overlapping hostnames are most common for vendors with many applications, such as Google or Meta. When you use the Application selector in Gateway policies, Gateway identifies the specific application at the application level, not just the hostname level. Actions are limited to the specific application defined. Gateway will also log other applications that use the same hostnames, but it will not take action unless the application was matched by the policy.
+
+For example, both the Facebook and Facebook Messenger apps use the `chat-e2ee.facebook.com` hostname. When evaluating traffic to the Facebook Messenger app, Gateway will only take action on Facebook Messenger traffic but may log both the Facebook and Facebook Messenger apps.
 
 To ensure Gateway evaluates traffic with your desired precedence, order your most specific policies with the highest priority according to [order of precedence](/cloudflare-one/traffic-policies/order-of-enforcement/#priority-within-a-policy-builder).
 
 ### Do Not Inspect applications
 
-Gateway automatically groups applications incompatible with TLS decryption into the _Do Not Inspect_ app type. As Cloudflare identifies incompatible applications, Gateway will periodically update this app type to add new applications. To ensure Gateway does not intercept any current or future incompatible traffic, you can [create a Do Not Inspect HTTP policy](/cloudflare-one/traffic-policies/http-policies/#do-not-inspect) with the entire _Do Not Inspect_ app type selected.
+Some applications break when Gateway performs [TLS decryption](/cloudflare-one/traffic-policies/http-policies/tls-decryption/) on their traffic. Gateway automatically groups these incompatible applications into the _Do Not Inspect_ app type.
+
+As Cloudflare identifies incompatible applications, Gateway will periodically update this app type to add new applications. To ensure Gateway does not intercept any current or future incompatible traffic, you can [create a Do Not Inspect HTTP policy](/cloudflare-one/traffic-policies/http-policies/#do-not-inspect) with the entire _Do Not Inspect_ app type selected.
 
 When managing applications with the [Application Library](/cloudflare-one/team-and-resources/app-library/), Do Not Inspect applications will appear under the corresponding application. For example, the App Library will group _Google Drive (Do Not Inspect)_ under **Google Drive**.
 
@@ -111,7 +120,7 @@ Applications can be incompatible with [TLS decryption](/cloudflare-one/traffic-p
   	prepend="**Certificate pinning**: Certificate pinning is "
   />
 
-- **Non-web traffic**: Some applications send non-web traffic, such as Session Initiation Protocol (SIP) and Extensible Messaging and Presence Protocol (XMPP), over TLS. Gateway cannot inspect these protocols.
+- **Non-web traffic**: Some applications send non-web traffic over TLS, such as Session Initiation Protocol (SIP) for voice and video calls, or Extensible Messaging and Presence Protocol (XMPP) for chat messages. These protocols are not HTTP-based, so Gateway cannot parse or re-sign them during TLS decryption.
 
 #### Microsoft 365 integration
 

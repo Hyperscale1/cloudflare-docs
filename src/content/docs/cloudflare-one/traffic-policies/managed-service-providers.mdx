@@ -9,9 +9,9 @@ sidebar:
 Only available on Enterprise plans. For more information, contact your account team.
 :::
 
-Gateway supports the [Cloudflare Tenant API](/tenant/), which allows Cloudflare-partnered managed service providers (MSPs) to set up and manage Cloudflare accounts and services for their customers. With the Tenant API, MSPs can create Zero Trust deployments with global Gateway policy control. Policies can be customized or overridden at a group or individual account level.
+Gateway supports the [Cloudflare Tenant API](/tenant/), which allows Cloudflare-partnered managed service providers (MSPs) to set up and manage Cloudflare accounts and services for their customers. With the Tenant API, MSPs can create Zero Trust deployments with global Gateway policy control. Policies can be customized or overridden at the parent account level or on individual child accounts.
 
-The Tenant platform only supports [DNS policies](/cloudflare-one/traffic-policies/dns-policies/). For more information, refer to the [Cloudflare Zero Trust for managed service providers](https://blog.cloudflare.com/gateway-managed-service-provider/) blog post.
+When used with Gateway, the Tenant platform only supports [DNS policies](/cloudflare-one/traffic-policies/dns-policies/). For more information, refer to the [Cloudflare Zero Trust for managed service providers](https://blog.cloudflare.com/gateway-managed-service-provider/) blog post.
 
 ## Get started
 
@@ -21,7 +21,7 @@ To set up the Tenant API, refer to [Get started](/tenant/get-started/). Once you
 
 ## Account types
 
-The Gateway Tenant platform supports tiered and siloed account configurations.
+The Gateway Tenant platform supports tiered and siloed account configurations. In a tiered configuration, a parent account enforces policies on all child accounts. In a siloed configuration, each account operates independently.
 
 ### Tiered accounts
 
@@ -34,7 +34,7 @@ In a tiered account configuration, a top-level parent account enforces global se
 
 Each child account is subject to the default Zero Trust [account limits](/cloudflare-one/account-limits/).
 
-Gateway evaluates parent account policies before any child account policies. To allow a child account to override a specific parent account policy, you can use the [Update a Zero Trust Gateway rule](/api/resources/zero_trust/subresources/gateway/subresources/rules/methods/update/) endpoint to set the policy's `allow_child_bypass` rule setting to `true`.
+Gateway evaluates parent account policies before any child account policies. By default, child accounts cannot override parent policies. To allow a child account to override a specific parent account policy, you can use the [Update a Zero Trust Gateway rule](/api/resources/zero_trust/subresources/gateway/subresources/rules/methods/update/) endpoint to set the policy's `allow_child_bypass` rule setting to `true`. When this setting is enabled, a child account can create a policy that takes precedence over the parent policy for traffic matching that child account.
 
 ```mermaid
 flowchart TD
@@ -81,7 +81,7 @@ flowchart TD
         n1["Block social media"]
   end
  subgraph s2["Siloed account C"]
-        n2["Block instant messaing"]
+        n2["Block instant messaging"]
   end
  subgraph s3["Siloed account B"]
         n3["Block news"]
