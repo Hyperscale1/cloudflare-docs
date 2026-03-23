@@ -2648,3 +2648,6 @@
 /changelog/2025-* /changelog/post/2025-:splat 301
 /changelog/2026-* /changelog/post/2026-:splat 301
 
+# Gradual deployments renamed to Split deployments
+/workers/configuration/versions-and-deployments/gradual-deployments/ /workers/configuration/versions-and-deployments/split-deployments/ 301
+
