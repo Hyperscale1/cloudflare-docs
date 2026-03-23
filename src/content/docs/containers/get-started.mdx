@@ -113,25 +113,23 @@ Your [Wrangler configuration file](/workers/wrangler/configuration/) defines the
 		{
 			"max_instances": 10,
 			"class_name": "MyContainer",
-			"image": "./Dockerfile"
-		}
+			"image": "./Dockerfile",
+		},
 	],
 	"durable_objects": {
 		"bindings": [
 			{
 				"name": "MY_CONTAINER",
-				"class_name": "MyContainer"
-			}
-		]
+				"class_name": "MyContainer",
+			},
+		],
 	},
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_sqlite_classes": [
-				"MyContainer"
-			]
-		}
-	]
+			"new_sqlite_classes": ["MyContainer"],
+		},
+	],
 }
 ```
 
@@ -202,7 +200,7 @@ This defines basic configuration for the container:
 - `envVars` sets environment variables that will be passed to the container when it starts.
 - `onStart`, `onStop`, and `onError` are hooks that run when the container starts, stops, or errors, respectively.
 
-See the [Container class documentation](/containers/container-package) for more details and configuration options.
+See the [Container class documentation](/containers/container-class/) for more details and configuration options.
 
 #### Routing to Containers
 

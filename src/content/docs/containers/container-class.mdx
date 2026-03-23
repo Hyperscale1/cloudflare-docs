@@ -1,0 +1,451 @@
+---
+pcx_content_type: reference
+title: Container Class
+sidebar:
+  order: 5
+description: API reference for the Container class and utility functions
+---
+
+import { PackageManagers } from "~/components";
+
+The [`Container` class](https://github.com/cloudflare/containers) from [`@cloudflare/containers`](https://www.npmjs.com/package/@cloudflare/containers) is the standard way to interact with container instances from a Worker. It wraps the underlying [Durable Object interface](/containers/platform-details/durable-object-methods) and provides a higher-level API for common container behaviors.
+
+:::note
+If you are using containers to run sandboxed code execution — for example, inside an AI agent — consider the [Sandbox SDK](/sandbox/) instead. It builds on top of Containers and provides a higher-level API for common sandbox workflows.
+:::
+
+<PackageManagers pkg="@cloudflare/containers" />
+
+Then, define a class that extends `Container` and use it in your Worker:
+
+```javascript
+import { Container } from "@cloudflare/containers";
+
+class MyContainer extends Container {
+	defaultPort = 8080;
+	sleepAfter = "5m";
+}
+
+export default {
+	async fetch(request, env) {
+		return env.MY_CONTAINER.getByName("hello").fetch(request);
+	},
+};
+```
+
+The `Container` class extends `DurableObject`, so all [Durable Object](/durable-objects) functionality is available.
+
+## Properties
+
+Configure these as class fields on your subclass. They apply to every instance of the container.
+
+- **`defaultPort`** (`number`, optional) — the port your container process listens on. `fetch` and `containerFetch` forward requests here unless you specify a different port via `switchPort` or the `port` argument to `containerFetch`. Most subclasses set this.
+
+- **`requiredPorts`** (`number[]`, optional) — ports that must be accepting connections before the container is considered ready. Used by `startAndWaitForPorts` when no `ports` argument is passed. Set this when your container runs multiple services that all need to be healthy before serving traffic.
+
+- **`sleepAfter`** (`string | number`, default: `"10m"`) — how long to keep the container alive without activity before shutting it down. Accepts a number of seconds or a duration string such as `"30s"`, `"5m"`, or `"1h"`. Activity resets the timer — see `renewActivityTimeout` for manual resets.
+
+- **`envVars`** (`Record<string, string>`, default: `{}`) — environment variables passed to the container on every start. For per-instance variables, pass `envVars` through `startAndWaitForPorts` instead.
+
+- **`entrypoint`** (`string[]`, optional) — overrides the image's default entrypoint. Useful when you want to run a different command without rebuilding the image, such as a dev server or a one-off task.
+
+- **`enableInternet`** (`boolean`, default: `true`) — controls whether the container can make outbound HTTP requests. Set to `false` for sandboxed environments where you want to intercept or block all outbound traffic.
+
+- **`pingEndpoint`** (`string`, default: `"ping"`) — the host and path the class uses to health-check the container during startup. Most users do not need to change this.
+
+## Lifecycle hooks
+
+Override these methods to run Worker code when the container changes state. Refer to the [status hooks example](/containers/examples/status-hooks/) for a full example.
+
+### `onStart`
+
+```ts
+onStart(): void | Promise<void>
+```
+
+Called when the container is up and accepting connections. Use this to log startup, seed data, or schedule recurring tasks with `schedule`.
+
+### `onStop`
+
+```ts
+onStop(params: StopParams): void | Promise<void>
+
+type StopParams = {
+  exitCode: number;
+  reason: 'exit' | 'runtime_signal';
+};
+```
+
+Called when the container process exits. `exitCode` and `reason` tell you whether it stopped cleanly or was signalled. Use this to log, alert, or restart the container.
+
+### `onError`
+
+```ts
+onError(error: unknown): any
+```
+
+Called when the container encounters an error during startup or port checking. The default implementation logs and re-throws. Override to suppress errors, notify an external service, or attempt a restart.
+
+### `onActivityExpired`
+
+```ts
+onActivityExpired(): Promise<void>
+```
+
+Called when the `sleepAfter` timeout expires with no incoming requests. The default implementation calls `this.stop()`. If you override this without stopping the container, the timer renews and this method fires again on the next expiry.
+
+## Request methods
+
+### `fetch`
+
+```ts
+fetch(request: Request): Promise<Response>
+```
+
+The entry point for all incoming HTTP and WebSocket requests. By default it forwards the request to the container process at `defaultPort`. The container is started automatically if it is not already running.
+
+Override `fetch` when you need routing logic, authentication, or other middleware before forwarding to the container. Inside the override, call `this.containerFetch()` rather than `this.fetch()` to avoid infinite recursion:
+
+```js
+export class MyContainer extends Container {
+	override async fetch(request) {
+		const url = new URL(request.url);
+
+		if (url.pathname === "/health") {
+			return new Response("ok");
+		}
+
+		// forward everything else to the container process
+		return this.containerFetch(request);
+	}
+}
+```
+
+`fetch` is the only method that supports WebSocket proxying. Refer to the [WebSocket example](/containers/examples/websocket/) for a full example.
+
+### `containerFetch`
+
+```ts
+containerFetch(request: Request, port?: number): Promise<Response>
+containerFetch(url: string | URL, init?: RequestInit, port?: number): Promise<Response>
+```
+
+Sends an HTTP request directly to the container process. This is what the default `fetch` implementation calls internally — and it is what you should call from within an overridden `fetch` method to avoid infinite recursion. It also accepts a standard fetch-style signature with a URL string and `RequestInit`, which is useful when you are constructing a new request rather than forwarding an existing one.
+
+Does not support WebSockets — use `fetch` with `switchPort` for those.
+
+## Start and stop
+
+In most cases you do not need to call these methods directly. `fetch` and `containerFetch` start the container automatically. Call these explicitly when you need to pre-warm a container, run a task on a schedule, or control the lifecycle from within a lifecycle hook.
+
+### `startAndWaitForPorts`
+
+```ts
+startAndWaitForPorts(args: StartAndWaitForPortsOptions): Promise<void>
+
+interface StartAndWaitForPortsOptions {
+  startOptions?: ContainerStartConfigOptions;
+  ports?: number | number[];
+  cancellationOptions?: {
+    abort?: AbortSignal;
+    instanceGetTimeoutMS?: number; // default: 8000ms
+    portReadyTimeoutMS?: number;   // default: 20000ms
+    waitInterval?: number;          // default: 300ms
+  };
+}
+
+interface ContainerStartConfigOptions {
+  envVars?: Record<string, string>;
+  entrypoint?: string[];
+  enableInternet?: boolean;
+}
+```
+
+Starts the container and waits until the specified ports are accepting connections before resolving. This is the safest way to explicitly start a container when you need to be certain it is ready before sending traffic. Port resolution order: explicit `ports` argument → `requiredPorts` → `defaultPort`. Calls `onStart` when all ports are ready.
+
+Use `startOptions` to pass per-instance environment variables:
+
+```js
+await container.startAndWaitForPorts({
+	startOptions: {
+		envVars: { API_KEY: env.API_KEY },
+	},
+});
+```
+
+Refer to the [env vars and secrets example](/containers/examples/env-vars-and-secrets/) for a full example.
+
+### `start`
+
+```ts
+start(startOptions?: ContainerStartConfigOptions, waitOptions?: WaitOptions): Promise<void>
+
+interface WaitOptions {
+  portToCheck: number;
+  signal?: AbortSignal;
+  retries?: number;
+  waitInterval?: number; // milliseconds
+}
+```
+
+Starts the container without waiting for ports to become ready. Use this when the container does not expose ports — for example, a batch job or a cron task — or when you want to check readiness yourself with `waitForPort`.
+
+Refer to the [cron example](/containers/examples/cron/) for a full example.
+
+### `waitForPort`
+
+```ts
+waitForPort(waitOptions: WaitOptions): Promise<number>
+```
+
+Polls a single port until it accepts connections. Returns the number of retries used. Throws if the port does not become available within the retry limit. Use this after `start` when you need to check multiple ports independently or in a specific sequence.
+
+### `stop`
+
+```ts
+stop(signal?: 'SIGTERM' | 'SIGINT' | 'SIGKILL' | number): Promise<void>
+```
+
+Sends a signal to the container process. Defaults to `SIGTERM`, which gives the process a chance to shut down gracefully. Triggers `onStop`.
+
+### `destroy`
+
+```ts
+destroy(): Promise<void>
+```
+
+Immediately kills the container with `SIGKILL`. Use this when you need the container gone and cannot wait for a graceful shutdown. Triggers `onStop`.
+
+## State and monitoring
+
+### `getState`
+
+```ts
+getState(): Promise<State>
+
+type State = {
+  lastChange: number;
+} & (
+  | { status: 'running' | 'stopping' | 'stopped' | 'healthy' }
+  | { status: 'stopped_with_code'; exitCode?: number }
+);
+```
+
+Returns the current container state. `running` means the container is starting and has not yet passed its health check. `healthy` means it is up and accepting requests.
+
+```js
+const state = await this.getState();
+
+if (state.status === "stopped_with_code") {
+	console.error("Container exited with code", state.exitCode);
+}
+```
+
+### `renewActivityTimeout`
+
+```ts
+renewActivityTimeout(): void
+```
+
+Resets the `sleepAfter` timer. Incoming requests reset it automatically. Call this manually from background work — such as a scheduled task or a long-running operation — that should count as activity and prevent the container from sleeping.
+
+## Scheduling
+
+### `schedule`
+
+```ts
+schedule<T>(when: Date | number, callback: string, payload?: T): Promise<Schedule<T>>
+
+type Schedule<T> = {
+  taskId: string;
+  callback: string;
+  payload: T;
+} & (
+  | { type: 'scheduled'; time: number }
+  | { type: 'delayed'; time: number; delayInSeconds: number }
+);
+```
+
+Schedules a method on the class to run at a future time. `when` is either a `Date` or a delay in seconds. `callback` is the name of the method to call. Do not override `alarm()` directly — the `Container` class uses the alarm handler to manage the container lifecycle, so use `schedule` instead.
+
+The following example schedules a recurring health report starting at container startup:
+
+```js
+import { Container } from "@cloudflare/containers";
+
+export class MyContainer extends Container {
+	defaultPort = 8080;
+
+	override async onStart() {
+		await this.schedule(60, "healthReport");
+	}
+
+	async healthReport() {
+		const state = await this.getState();
+		console.log("Container status:", state.status);
+		await this.schedule(60, "healthReport");
+	}
+}
+```
+
+## Outbound interception
+
+Outbound interception lets you intercept, mock, or block HTTP requests that the container makes to external hosts. This is useful for sandboxing, testing, or proxying outbound traffic through Worker code.
+
+To use outbound interception, export `ContainerProxy` from your Worker entry point:
+
+```js
+import { ContainerProxy } from "@cloudflare/containers";
+export { ContainerProxy };
+```
+
+### Static properties
+
+Define these on your class to configure interception at deploy time.
+
+- **`static outbound`** — catch-all handler for outbound requests not matched by any host-specific rule.
+
+- **`static outboundByHost`** — per-host handlers. Keys are exact hostnames such as `"api.example.com"` or an IP address.
+
+- **`static outboundHandlers`** — named handlers that can be switched on at runtime via `setOutboundHandler` and `setOutboundByHost`. Use these when you want to change which handler is active based on runtime conditions.
+
+Matching order:
+
+1. Runtime `setOutboundByHost` override
+2. Static `outboundByHost`
+3. Runtime `setOutboundHandler` catch-all
+4. Static `outbound`
+
+If nothing matches: requests pass through when `enableInternet` is `true`, and are blocked when `enableInternet` is `false`.
+
+Each handler receives the outgoing request, the Worker `env`, and an `OutboundHandlerContext`:
+
+```ts
+type OutboundHandlerContext = {
+	containerId: string;
+	className: string;
+	params?: unknown;
+};
+```
+
+The following example blocks a specific host and logs all other outbound requests:
+
+```js
+import {
+	Container,
+	ContainerProxy,
+	getContainer,
+} from "@cloudflare/containers";
+
+export class MyContainer extends Container {
+	defaultPort = 8080;
+	enableInternet = false;
+
+	static outboundByHost = {
+		"blocked.example.com": (_req, _env, _ctx) => {
+			return new Response("Blocked", { status: 403 });
+		},
+	};
+
+	static outbound = async (req, _env, ctx) => {
+		console.log(`[${ctx.containerId}] outbound:`, req.url);
+		return fetch(req);
+	};
+}
+
+export { ContainerProxy };
+
+export default {
+	async fetch(request, env) {
+		return getContainer(env.MY_CONTAINER).fetch(request);
+	},
+};
+```
+
+### Instance methods
+
+Use these to switch handlers at runtime after the container has started.
+
+#### `setOutboundHandler`
+
+```ts
+setOutboundHandler(methodName: string, params?: unknown): Promise<void>
+```
+
+Sets the active catch-all handler to a named entry in `static outboundHandlers`.
+
+#### `setOutboundByHost`
+
+```ts
+setOutboundByHost(hostname: string, methodName: string, params?: unknown): Promise<void>
+```
+
+Routes a specific hostname to a named handler at runtime.
+
+#### `setOutboundByHosts`
+
+```ts
+setOutboundByHosts(handlers: Record<string, string | { method: string; params?: unknown }>): Promise<void>
+```
+
+Replaces all runtime hostname overrides at once.
+
+#### `removeOutboundByHost`
+
+```ts
+removeOutboundByHost(hostname: string): Promise<void>
+```
+
+Removes a runtime hostname override, falling back to any matching static handler.
+
+## Utility functions
+
+These functions are exported alongside the `Container` class from `@cloudflare/containers`.
+
+### `getContainer`
+
+```ts
+getContainer<T>(binding: DurableObjectNamespace<T>, name?: string): DurableObjectStub<T>
+```
+
+Returns a stub for a named container instance. If `name` is omitted, the name `"cf-singleton-container"` is used. Use this when you want one container per logical entity — a user session, a document, a game room — identified by a stable name.
+
+```js
+import { getContainer } from "@cloudflare/containers";
+
+export default {
+	async fetch(request, env) {
+		const { sessionId } = await request.json();
+		return getContainer(env.MY_CONTAINER, sessionId).fetch(request);
+	},
+};
+```
+
+### `getRandom`
+
+```ts
+getRandom<T>(binding: DurableObjectNamespace<T>, instances?: number): Promise<DurableObjectStub<T>>
+```
+
+Returns a stub for a randomly selected instance across `instances` total instances (default: `3`). Use this for stateless workloads where any container can handle any request and you want to spread load across multiple instances.
+
+Refer to the [stateless instances example](/containers/examples/stateless/) for a full example.
+
+### `switchPort`
+
+```ts
+switchPort(request: Request, port: number): Request
+```
+
+Returns a copy of the request with the target port encoded in a header, so `container.fetch()` forwards to that port instead of `defaultPort`. Use this when you need to target a specific port and also need WebSocket support — if you do not need WebSockets, pass the port directly to `containerFetch` instead.
+
+```js
+import { getContainer, switchPort } from "@cloudflare/containers";
+
+export default {
+	async fetch(request, env) {
+		const container = getContainer(env.MY_CONTAINER);
+		return container.fetch(switchPort(request, 9090));
+	},
+};
+```
